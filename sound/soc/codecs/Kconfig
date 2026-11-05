@@ -1313,3 +1313,10 @@ config SND_SOC_TPA6130A2
 	depends on I2C
 
 endmenu
+
+config SND_SOC_AW8896
+	tristate "Awinic AW8896 Audio Amplifier"
+	depends on I2C
+	default y
+	help
+	  Enable support for Awinic AW8896 smart audio amplifier.

@@ -292,8 +292,11 @@ int qcom_cc_really_probe(struct platform_device *pdev,
 			continue;
 
 		ret = devm_clk_register_regmap(dev, rclks[i]);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "Failed to register rclk[%d] (%s): %d\n",
+				i, rclks[i]->hw.init ? rclks[i]->hw.init->name : "unknown", ret);
 			return ret;
+		}
 	}
 
 	ret = devm_of_clk_add_hw_provider(dev, qcom_cc_clk_hw_get, cc);

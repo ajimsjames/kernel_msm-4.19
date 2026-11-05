@@ -519,7 +519,9 @@ static void zonda_pll_adjust_l_val(unsigned long rate, unsigned long prate,
 	remainder = do_div(quotient, prate);
 	*l = quotient;
 
-	if ((remainder * 2) / prate)
+	quotient = remainder * 2;
+	do_div(quotient, prate);
+	if (quotient)
 		*l = *l + 1;
 }
 

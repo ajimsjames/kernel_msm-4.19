@@ -2093,10 +2093,11 @@ static int cam_smmu_setup_cb(struct cam_context_bank_info *cb,
 	}
 	/* create a virtual mapping */
 	cb->domain = iommu_get_domain_for_dev(cb->dev);
-	if (IS_ERR(cb->domain)) {
+	if (IS_ERR_OR_NULL(cb->domain)) {
 		pr_err("iommu get domain for dev: %s failed\n",
 			dev_name(cb->dev));
 		rc = -ENODEV;
+		cb->domain = NULL;
 		goto end;
 	}
 
@@ -2234,12 +2235,16 @@ static int cam_populate_smmu_context_banks(struct device *dev,
 		CDBG("getting Arm SMMU ctx : %s\n", cb->name);
 
 	rc = cam_smmu_setup_cb(cb, ctx);
-	if (rc < 0)
+	if (rc < 0) {
 		pr_err("Error: failed to setup cb : %s\n", cb->name);
+		return rc;
+	}
 
-	iommu_set_fault_handler(cb->domain,
-			cam_smmu_iommu_fault_handler,
-			(void *)cb->name);
+	if (cb->domain) {
+		iommu_set_fault_handler(cb->domain,
+				cam_smmu_iommu_fault_handler,
+				(void *)cb->name);
+	}
 
 	if (iommu_cb_set.camera_secure_sid) {
 		rc = cam_smmu_attach(iommu_cb_set.cb_init_count);

@@ -116,6 +116,18 @@
 			reg = <0x0 0x90000000 0x0 0x1400000>;
 		};
 
+		
+		ramoops_region: ramoops_region@8ff00000 {
+			compatible = "ramoops";
+			no-map;
+			reg = <0x0 0x8ff00000 0x0 0x100000>;
+			record-size = <0x20000>;
+			console-size = <0x80000>;
+			pmsg-size = <0x20000>;
+			ftrace-size = <0x0>;
+			status = "ok";
+		};
+
 		dump_mem: mem_dump_region {
 			compatible = "shared-dma-pool";
 			reusable;

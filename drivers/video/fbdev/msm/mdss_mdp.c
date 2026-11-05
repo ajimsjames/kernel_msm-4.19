@@ -1906,9 +1906,12 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 
 	mdata->fs = devm_regulator_get(&mdata->pdev->dev, "vdd");
 	if (IS_ERR_OR_NULL(mdata->fs)) {
+		int reg_err = PTR_ERR(mdata->fs);
 		mdata->fs = NULL;
-		pr_err("unable to get gdsc regulator\n");
-		return -EINVAL;
+		if (reg_err == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
+		pr_err("unable to get gdsc regulator (err=%d)\n", reg_err);
+		return reg_err ? reg_err : -EINVAL;
 	}
 
 	mdata->core_gdsc = devm_regulator_get_optional(&mdata->pdev->dev,
@@ -2505,9 +2508,11 @@ void mdss_mdp_footswitch_ctrl_splash(int on)
 					pr_err("core_gdsc failed to enable\n");
 			}
 
-			ret = regulator_enable(mdata->fs);
-			if (ret)
-				pr_err("Footswitch failed to enable\n");
+			if (mdata->fs) {
+				ret = regulator_enable(mdata->fs);
+				if (ret)
+					pr_err("Footswitch failed to enable\n");
+			}
 
 			mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 			mdss_bus_bandwidth_ctrl(true);
@@ -2515,7 +2520,8 @@ void mdss_mdp_footswitch_ctrl_splash(int on)
 			pr_debug("Disable MDP FS for splash.\n");
 			mdss_bus_bandwidth_ctrl(false);
 			mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
-			regulator_disable(mdata->fs);
+			if (mdata->fs)
+				regulator_disable(mdata->fs);
 			if (mdata->core_gdsc)
 				regulator_disable(mdata->core_gdsc);
 			mdata->handoff_pending = false;
@@ -3232,7 +3238,7 @@ probe_done:
 		if (!num_of_display_on)
 			mdss_mdp_footswitch_ctrl_splash(false);
 
-		if (mdata->regulator_notif_register)
+		if (mdata->regulator_notif_register && mdata->fs)
 			regulator_unregister_notifier(mdata->fs,
 						&(mdata->gdsc_cb));
 		mdss_mdp_hw.ptr = NULL;

@@ -139,3 +139,12 @@ kernel/configs/android-*.cfg
 #Ignoring Android.bp link file
 #
 Android.bp
+
+# Build outputs and boot packages
+/boot_package/
+/output/
+*.img
+*.dtb
+*.dtbo
+/KernelSU-Next/
+/drivers/kernelsu

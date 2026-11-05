@@ -3873,7 +3873,7 @@ static int __early_init_resources(struct venus_hfi_device *device,
 	rc = __init_regulators(device);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to get all regulators\n");
-		return -ENODEV;
+		return rc;
 	}
 
 	rc = __init_clocks(device);
@@ -4022,6 +4022,8 @@ static int __enable_regulators(struct venus_hfi_device *device)
 	dprintk(VIDC_DBG, "Enabling regulators\n");
 
 	venus_hfi_for_each_regulator(device, rinfo) {
+		if (!rinfo->regulator)
+			continue;
 		rc = regulator_enable(rinfo->regulator);
 		if (rc) {
 			dprintk(VIDC_ERR,
@@ -4038,8 +4040,10 @@ static int __enable_regulators(struct venus_hfi_device *device)
 	return 0;
 
 err_reg_enable_failed:
-	venus_hfi_for_each_regulator_reverse_continue(device, rinfo, c)
-		__disable_regulator(rinfo);
+	venus_hfi_for_each_regulator_reverse_continue(device, rinfo, c) {
+		if (rinfo->regulator)
+			__disable_regulator(rinfo);
+	}
 
 	return rc;
 }
@@ -4050,8 +4054,10 @@ static int __disable_regulators(struct venus_hfi_device *device)
 
 	dprintk(VIDC_DBG, "Disabling regulators\n");
 
-	venus_hfi_for_each_regulator_reverse(device, rinfo)
-		__disable_regulator(rinfo);
+	venus_hfi_for_each_regulator_reverse(device, rinfo) {
+		if (rinfo->regulator)
+			__disable_regulator(rinfo);
+	}
 
 	return 0;
 
@@ -4590,6 +4596,10 @@ static int venus_hfi_core_early_init(void *device)
 
 	mutex_lock(&dev->lock);
 	rc = __early_init_resources(dev, dev->res);
+	if (rc) {
+		mutex_unlock(&dev->lock);
+		return rc;
+	}
 	rc = __venus_early_power_on(device);
 	mutex_unlock(&dev->lock);
 	return rc;

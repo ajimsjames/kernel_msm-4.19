@@ -154,10 +154,12 @@ check_copy_size(const void *addr, size_t bytes, bool is_source)
 	if (unlikely(sz >= 0 && sz < bytes)) {
 		if (!__builtin_constant_p(bytes))
 			copy_overflow(sz, bytes);
+#if 0
 		else if (is_source)
 			__bad_copy_from();
 		else
 			__bad_copy_to();
+#endif
 		return false;
 	}
 	check_object_size(addr, bytes, is_source);

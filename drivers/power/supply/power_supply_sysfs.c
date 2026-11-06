@@ -223,6 +223,19 @@ static ssize_t power_supply_show_property(struct device *dev,
 	case POWER_SUPPLY_PROP_MODEL_NAME ... POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		ret = sprintf(buf, "%s\n", value.strval);
 		break;
+	case POWER_SUPPLY_PROP_TEMP:
+	case POWER_SUPPLY_PROP_TEMP_AMBIENT:
+		/*
+		 * Android BatteryService expects tenths of a degree Celsius (0.1 C).
+		 * If any driver returns millidegrees (e.g. 33000 -> 33 C) or scaled units (3300 -> 33 C),
+		 * clamp it down to tenths of a degree so healthd/Android does not see 3300.0 C and shut down!
+		 */
+		if (value.intval > 10000)
+			value.intval /= 100;
+		else if (value.intval > 1000)
+			value.intval /= 10;
+		ret = sprintf(buf, "%d\n", value.intval);
+		break;
 	default:
 		ret = sprintf(buf, "%d\n", value.intval);
 	}

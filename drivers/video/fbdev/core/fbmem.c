@@ -1681,10 +1681,14 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 		return -ENXIO;
 
 	num_registered_fb++;
-	for (i = 0 ; i < FB_MAX; i++)
-		if (!registered_fb[i])
-			break;
-	fb_info->node = i;
+	if (fb_info->node >= 0 && fb_info->node < FB_MAX && !registered_fb[fb_info->node]) {
+		i = fb_info->node;
+	} else {
+		for (i = 0 ; i < FB_MAX; i++)
+			if (!registered_fb[i])
+				break;
+		fb_info->node = i;
+	}
 	atomic_set(&fb_info->count, 1);
 	mutex_init(&fb_info->lock);
 	mutex_init(&fb_info->mm_lock);
@@ -1931,6 +1935,8 @@ EXPORT_SYMBOL(fb_set_suspend);
  *
  */
 
+static char *fb_devnode(struct device *dev, umode_t *mode) { if (mode) *mode = 0666; return NULL; }
+
 static int __init
 fbmem_init(void)
 {
@@ -1946,6 +1952,8 @@ fbmem_init(void)
 	}
 
 	fb_class = class_create(THIS_MODULE, "graphics");
+	if (!IS_ERR(fb_class))
+		fb_class->devnode = fb_devnode;
 	if (IS_ERR(fb_class)) {
 		ret = PTR_ERR(fb_class);
 		pr_warn("Unable to create fb class; errno = %d\n", ret);

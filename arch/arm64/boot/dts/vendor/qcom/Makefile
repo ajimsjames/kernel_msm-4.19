@@ -1,4 +1,5 @@
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtb-$(CONFIG_ARCH_QM215) += qm215.dtb
         dtbo-$(CONFIG_ARCH_KONA) += \
                 kona-cdp-overlay.dtbo \
                 kona-cdp-lcd-overlay.dtbo \
@@ -75,6 +76,7 @@ dtb-$(CONFIG_ARCH_KONA) += kona-rumi.dtb \
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtb-$(CONFIG_ARCH_QM215) += qm215.dtb
 dtbo-$(CONFIG_ARCH_LITO) += lito-rumi-overlay.dtbo \
                 lito-mtp-overlay.dtbo \
                 lito-v2-mtp-overlay.dtbo \
@@ -122,6 +124,7 @@ dtb-$(CONFIG_ARCH_LITO) += lito-rumi.dtb \
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtb-$(CONFIG_ARCH_QM215) += qm215.dtb
 dtbo-$(CONFIG_ARCH_LAGOON) += \
 		lagoon-rumi-overlay.dtbo \
 		lagoon-mtp-overlay.dtbo \
@@ -147,6 +150,7 @@ dtb-$(CONFIG_ARCH_LAGOON) += \
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtb-$(CONFIG_ARCH_QM215) += qm215.dtb
         dtbo-$(CONFIG_ARCH_BENGAL) += \
                 bengal-rumi-overlay.dtbo \
                 bengal-qrd-overlay.dtbo \
@@ -208,6 +212,7 @@ dtb-$(CONFIG_ARCH_BENGAL) += bengal-rumi.dtb \
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtb-$(CONFIG_ARCH_QM215) += qm215.dtb
         dtbo-$(CONFIG_ARCH_SCUBA) += \
 		scuba-rumi-overlay.dtbo \
 		scuba-idp-overlay.dtbo \
@@ -256,6 +261,7 @@ dtb-$(CONFIG_ARCH_SCUBA) += scuba-rumi.dtb \
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtb-$(CONFIG_ARCH_QM215) += qm215.dtb
         dtbo-$(CONFIG_ARCH_KHAJE) += \
 		khaje-atp-overlay.dtbo \
 		khaje-qrd-overlay.dtbo \
@@ -380,6 +386,7 @@ dtb-$(CONFIG_ARCH_KHAJE) += khaje-idp.dtb \
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtb-$(CONFIG_ARCH_QM215) += qm215.dtb
         dtbo-$(CONFIG_ARCH_SDM660) += \
                 sdm660-mtp-external-codec-overlay.dtbo \
                 sdm660-mtp-internal-codec-overlay.dtbo \
@@ -448,6 +455,7 @@ sdm660-internal-codec-cdp.dtb \
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtb-$(CONFIG_ARCH_QM215) += qm215.dtb
 
 dtbo-$(CONFIG_ARCH_SDM439) += sdm439-mtp-overlay.dtbo \
         sdm439-cdp-overlay.dtbo \
@@ -505,7 +513,7 @@ dtb-$(CONFIG_ARCH_SDM439) += sdm439-mtp.dtb \
 dtb-$(CONFIG_ARCH_QM215) += qm215-qrd.dtb \
 	qcm2150-qrd.dtb \
 	qm215-qrd-smb1360.dtb \
-	qm215-cats22.dtb
+	qm215.dtb qm215-cats22.dtb
 
 dtb-$(CONFIG_ARCH_SDM429) += sdm429-mtp.dtb \
 	sdm429-cdp.dtb \

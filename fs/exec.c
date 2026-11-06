@@ -844,8 +844,11 @@ static struct file *do_open_execat(int fd, struct filename *name, int flags)
 		.lookup_flags = LOOKUP_FOLLOW,
 	};
 
-	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
-		return ERR_PTR(-EINVAL);
+	/*
+	 * Allow userspace flags such as Android 15 FLAG_COMPAT_VA_39_BIT
+	 * while preserving standard lookup behavior.
+	 */
+	flags &= (AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH);
 	if (flags & AT_SYMLINK_NOFOLLOW)
 		open_exec_flags.lookup_flags &= ~LOOKUP_FOLLOW;
 	if (flags & AT_EMPTY_PATH)

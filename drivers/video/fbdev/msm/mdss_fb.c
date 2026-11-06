@@ -268,6 +268,7 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 }
 
 static int lcd_backlight_registered;
+static int lcd_backlight2_registered;
 
 static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 				      enum led_brightness value)
@@ -315,6 +316,14 @@ static enum led_brightness mdss_fb_get_bl_brightness(
 
 static struct led_classdev backlight_led = {
 	.name           = "lcd-backlight",
+	.brightness     = MDSS_MAX_BL_BRIGHTNESS / 2,
+	.brightness_set = mdss_fb_set_bl_brightness,
+	.brightness_get = mdss_fb_get_bl_brightness,
+	.max_brightness = MDSS_MAX_BL_BRIGHTNESS,
+};
+
+static struct led_classdev backlight2_led = {
+	.name           = "lcd-backlight2",
 	.brightness     = MDSS_MAX_BL_BRIGHTNESS / 2,
 	.brightness_set = mdss_fb_set_bl_brightness,
 	.brightness_get = mdss_fb_get_bl_brightness,
@@ -1520,6 +1529,40 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 	return 0;
 }
 
+
+#if defined(CONFIG_FB_MSM_MDSS_SPI_PANEL)
+extern int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
+			char __iomem *buf, int len, int dma_stride);
+extern int mdss_spi_panel_on(struct mdss_panel_data *pdata);
+extern int mdss_spi_panel_off(struct mdss_panel_data *pdata);
+static void mdss_spi_pan_display_handler(struct msm_fb_data_type *mfd)
+{
+	struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (pdata && mfd->fbi && mfd->fbi->screen_base) {
+		mdss_spi_panel_kickoff(pdata, mfd->fbi->screen_base,
+			mfd->fbi->fix.smem_len, mfd->fbi->fix.line_length);
+	}
+}
+static int mdss_spi_fb_on(struct msm_fb_data_type *mfd)
+{
+	struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (pdata)
+		return mdss_spi_panel_on(pdata);
+	return 0;
+}
+static int mdss_spi_fb_off(struct msm_fb_data_type *mfd)
+{
+	struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (pdata)
+		return mdss_spi_panel_off(pdata);
+	return 0;
+}
+static int mdss_spi_fb_init(struct msm_fb_data_type *mfd)
+{
+	return 0;
+}
+#endif
+
 static int mdss_fb_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = NULL;
@@ -1554,9 +1597,18 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->fbi = fbi;
 	mfd->panel_info = &pdata->panel_info;
 	mfd->panel.type = pdata->panel_info.type;
-	mfd->panel.id = mfd->index;
 	mfd->fb_page = MDSS_FB_NUM;
-	mfd->index = fbi_list_index;
+
+	if (of_device_is_compatible(pdev->dev.of_node, "qcom,mdss-fb2")) {
+		mfd->index = 2;
+	} else {
+		u32 cell_idx = 0;
+		if (!of_property_read_u32(pdev->dev.of_node, "cell-index", &cell_idx))
+			mfd->index = cell_idx;
+		else
+			mfd->index = fbi_list_index;
+	}
+	mfd->panel.id = mfd->index;
 	mfd->mdp_fb_page_protection = MDP_FB_PAGE_PROTECTION_WRITECOMBINE;
 
 	mfd->ext_ad_ctrl = -1;
@@ -1576,7 +1628,9 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	mfd->pdev = pdev;
 
-	if (mfd->panel.type == SPI_PANEL || mfd->panel.type == EBI2_PANEL)
+	if (mfd->panel.type == SPI_PANEL)
+		mfd->fb_imgType = MDP_RGBA_8888;
+	else if (mfd->panel.type == EBI2_PANEL)
 		mfd->fb_imgType = MDP_RGB_565;
 
 	mfd->split_fb_left = mfd->split_fb_right = 0;
@@ -1586,6 +1640,14 @@ static int mdss_fb_probe(struct platform_device *pdev)
 		mfd->split_mode, mfd->split_fb_left, mfd->split_fb_right);
 
 	mfd->mdp = *mdp_instance;
+#if defined(CONFIG_FB_MSM_MDSS_SPI_PANEL)
+	if (mfd->panel.type == SPI_PANEL) {
+		mfd->mdp.init_fnc = mdss_spi_fb_init;
+		mfd->mdp.on_fnc = mdss_spi_fb_on;
+		mfd->mdp.off_fnc = mdss_spi_fb_off;
+		mfd->mdp.dma_fnc = mdss_spi_pan_display_handler;
+	}
+#endif
 
 	rc = of_property_read_bool(pdev->dev.of_node,
 		"qcom,boot-indication-enabled");
@@ -1602,7 +1664,11 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mutex_init(&mfd->switch_lock);
 	mutex_init(&mfd->sd_lock);
 
-	fbi_list[fbi_list_index++] = fbi;
+	fbi->node = mfd->index;
+	if (mfd->index < MAX_FBI_LIST)
+		fbi_list[mfd->index] = fbi;
+	if (fbi_list_index <= mfd->index)
+		fbi_list_index = mfd->index + 1;
 
 	platform_set_drvdata(pdev, mfd);
 
@@ -1628,13 +1694,20 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	pm_runtime_enable(mfd->fbi->dev);
 
 	/* android supports only one lcd-backlight/lcd for now */
-	if (!lcd_backlight_registered) {
+	if (mfd->index == 0 || !lcd_backlight_registered) {
 		backlight_led.brightness = mfd->panel_info->brightness_max;
 		backlight_led.max_brightness = mfd->panel_info->brightness_max;
 		if (led_classdev_register(&pdev->dev, &backlight_led))
 			pr_err("led_classdev_register failed\n");
 		else
 			lcd_backlight_registered = 1;
+	} else if (!lcd_backlight2_registered) {
+		backlight2_led.brightness = mfd->panel_info->brightness_max;
+		backlight2_led.max_brightness = mfd->panel_info->brightness_max;
+		if (led_classdev_register(&pdev->dev, &backlight2_led))
+			pr_err("led_classdev_register backlight2 failed\n");
+		else
+			lcd_backlight2_registered = 1;
 	}
 
 	mdss_fb_init_panel_modes(mfd, pdata);
@@ -1656,7 +1729,8 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 		/* Initialize CWB notifier callback */
 		mdp5_data = mfd_to_mdp5_data(mfd);
-		if (test_bit(MDSS_CAPS_CWB_SUPPORTED,
+		if (mdp5_data && mdp5_data->mdata &&
+			test_bit(MDSS_CAPS_CWB_SUPPORTED,
 					mdp5_data->mdata->mdss_caps_map))
 			mdp5_data->cwb.cwb_sync_pt_data.notifier.notifier_call =
 				__mdss_fb_sync_buf_done_callback;
@@ -1734,9 +1808,12 @@ static int mdss_fb_remove(struct platform_device *pdev)
 	/* remove /dev/fb* */
 	unregister_framebuffer(mfd->fbi);
 
-	if (lcd_backlight_registered) {
+	if (mfd->index == 0 && lcd_backlight_registered) {
 		lcd_backlight_registered = 0;
 		led_classdev_unregister(&backlight_led);
+	} else if (lcd_backlight2_registered) {
+		lcd_backlight2_registered = 0;
+		led_classdev_unregister(&backlight2_led);
 	}
 
 	return 0;
@@ -1954,9 +2031,11 @@ static const struct dev_pm_ops mdss_fb_pm_ops = {
 
 static const struct of_device_id mdss_fb_dt_match[] = {
 	{ .compatible = "qcom,mdss-fb",},
+	{ .compatible = "qcom,mdss-fb2",},
 	{}
 };
 EXPORT_COMPAT("qcom,mdss-fb");
+EXPORT_COMPAT("qcom,mdss-fb2");
 
 static struct platform_driver mdss_fb_driver = {
 	.probe = mdss_fb_probe,
@@ -5428,9 +5507,17 @@ int mdss_register_panel(struct platform_device *pdev,
 	pdata->active = true;
 	fb_pdev = of_find_device_by_node(node);
 	if (fb_pdev) {
-		rc = mdss_fb_register_extra_panel(fb_pdev, pdata);
-		if (rc == 0)
-			master_panel = false;
+		if (fb_pdev->dev.platform_data == NULL) {
+			pr_info("assigning platform_data to existing fb_pdev %s and probing\n", dev_name(&fb_pdev->dev));
+			fb_pdev->dev.platform_data = pdata;
+			rc = mdss_fb_probe(fb_pdev);
+			if (rc)
+				pr_err("mdss_fb_probe failed for %s rc=%d\n", dev_name(&fb_pdev->dev), rc);
+		} else {
+			rc = mdss_fb_register_extra_panel(fb_pdev, pdata);
+			if (rc == 0)
+				master_panel = false;
+		}
 	} else {
 		pr_info("adding framebuffer device %s\n", dev_name(&pdev->dev));
 		fb_pdev = of_platform_device_create(node, NULL,

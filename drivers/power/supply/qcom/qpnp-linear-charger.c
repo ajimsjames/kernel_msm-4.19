@@ -1250,6 +1250,10 @@ static int get_prop_batt_health(struct qpnp_lbc_chip *chip)
 	u8 reg_val;
 	int rc;
 
+	/* If BTC is disabled in device tree, hardware therm comparator is bypassed */
+	if (chip->cfg_btc_disabled)
+		return POWER_SUPPLY_HEALTH_GOOD;
+
 	rc = qpnp_lbc_read(chip, chip->bat_if_base + BAT_IF_TEMP_STATUS_REG,
 				&reg_val, 1);
 	if (rc) {
@@ -1374,6 +1378,9 @@ static int get_prop_batt_status(struct qpnp_lbc_chip *chip)
 	}
 
 	if (reg_val & FAST_CHG_ON_IRQ)
+		return POWER_SUPPLY_STATUS_CHARGING;
+
+	if (qpnp_lbc_is_usb_chg_plugged_in(chip) && !chip->charger_disabled)
 		return POWER_SUPPLY_STATUS_CHARGING;
 
 	return POWER_SUPPLY_STATUS_DISCHARGING;

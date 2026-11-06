@@ -374,6 +374,18 @@ int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 		pr_err("Failed reading BAT_TEMP over ADC rc=%d\n", rc);
 		return rc;
 	}
+
+	/*
+	 * Android POWER_SUPPLY_PROP_TEMP expects tenths of a degree Celsius (0.1 C).
+	 * If IIO ADC returns millidegrees (e.g. 33000 -> 33.0 C) or hundredths (3300 -> 33.0 C),
+	 * scale it down to tenths of a degree so healthd/BatteryService does not see 3300.0 C
+	 * and trigger emergency thermal shutdown.
+	 */
+	if (*temp > 10000)
+		*temp /= 100;
+	else if (*temp > 1000)
+		*temp /= 10;
+
 	pr_debug("batt_temp = %d\n", *temp);
 
 	return 0;

@@ -2,9 +2,9 @@
 set -e
 
 KERNEL_DIR="/home/aju/Android/kernel_4.19"
-CLANG_DIR="/home/aju/Android/02_ROM_Build_Trees/voltageos/prebuilts/clang/host/linux-x86/clang-r563880c"
-GCC64_DIR="/home/aju/Android/02_ROM_Build_Trees/voltageos/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9"
-GCC32_DIR="/home/aju/Android/02_ROM_Build_Trees/voltageos/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9"
+CLANG_DIR="/home/aju/Android/Tools/prebuilts/clang/host/linux-x86/clang-r563880c"
+GCC64_DIR="/home/aju/Android/Tools/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9"
+GCC32_DIR="/home/aju/Android/Tools/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9"
 
 export PATH=$CLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH
 
@@ -25,7 +25,7 @@ ARGS=(
 
 cd "$KERNEL_DIR"
 echo "[+] Compiling ARM64 Kernel (Image.gz)..."
-make -j$(nproc) "${ARGS[@]}" Image.gz
+make "${ARGS[@]}" olddefconfig && make -j$(nproc) "${ARGS[@]}" Image.gz
 
 echo "[+] Kernel build complete: $KERNEL_DIR/arch/arm64/boot/Image.gz"
 ls -lh "$KERNEL_DIR/arch/arm64/boot/Image.gz"

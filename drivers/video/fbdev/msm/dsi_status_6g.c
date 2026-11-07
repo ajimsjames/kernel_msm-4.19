@@ -94,6 +94,10 @@ void mdss_check_dsi_ctrl_status(struct work_struct *work, uint32_t interval)
 	}
 
 	mdp5_data = mfd_to_mdp5_data(pstatus_data->mfd);
+	if (!mdp5_data) {
+		pr_debug("%s: mdp5_data is NULL\n", __func__);
+		return;
+	}
 	ctl = mfd_to_ctl(pstatus_data->mfd);
 
 	if (!ctl) {

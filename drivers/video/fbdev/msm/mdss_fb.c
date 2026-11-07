@@ -756,7 +756,8 @@ static int mdss_fb_blanking_mode_switch(struct msm_fb_data_type *mfd, int mode)
 
 	mfd->op_enable = false;
 
-	ret = mfd->mdp.configure_panel(mfd, mode, 1);
+	if (mfd->mdp.configure_panel)
+		ret = mfd->mdp.configure_panel(mfd, mode, 1);
 	mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->panel.type);
 
 	mfd->op_enable = true;
@@ -1701,7 +1702,9 @@ static int mdss_fb_probe(struct platform_device *pdev)
 			pr_err("led_classdev_register failed\n");
 		else
 			lcd_backlight_registered = 1;
-	} else if (!lcd_backlight2_registered) {
+	} else if (mfd->panel.type == SPI_PANEL && !lcd_backlight2_registered) {
+		mfd->allow_bl_update = true;
+		mfd->panel_info->cont_splash_enabled = false;
 		backlight2_led.brightness = mfd->panel_info->brightness_max;
 		backlight2_led.max_brightness = mfd->panel_info->brightness_max;
 		if (led_classdev_register(&pdev->dev, &backlight2_led))
@@ -1811,7 +1814,7 @@ static int mdss_fb_remove(struct platform_device *pdev)
 	if (mfd->index == 0 && lcd_backlight_registered) {
 		lcd_backlight_registered = 0;
 		led_classdev_unregister(&backlight_led);
-	} else if (lcd_backlight2_registered) {
+	} else if (mfd->panel.type == SPI_PANEL && lcd_backlight2_registered) {
 		lcd_backlight2_registered = 0;
 		led_classdev_unregister(&backlight2_led);
 	}
@@ -2084,9 +2087,10 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	bool ad_bl_notify_needed = false;
 	bool bl_notify_needed = false;
 
-	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
+	if (mfd->panel.type != SPI_PANEL &&
+	    ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
 		|| !mfd->allow_bl_update) && !IS_CALIB_MODE_BL(mfd)) ||
-		mfd->panel_info->cont_splash_enabled) {
+		mfd->panel_info->cont_splash_enabled)) {
 		mfd->unset_bl_level = bkl_lvl;
 		return;
 	} else if (mdss_fb_is_power_on(mfd) && mfd->panel_info->panel_dead) {
@@ -2491,7 +2495,8 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 	if (pdata->panel_info.is_lpm_mode &&
 			blank_mode == FB_BLANK_UNBLANK) {
 		pr_debug("panel is in lpm mode\n");
-		mfd->mdp.configure_panel(mfd, 0, 1);
+		if (mfd->mdp.configure_panel)
+			mfd->mdp.configure_panel(mfd, 0, 1);
 		mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->panel.type);
 		pdata->panel_info.is_lpm_mode = false;
 	}

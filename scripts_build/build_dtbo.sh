@@ -3,7 +3,7 @@ set -e
 
 KERNEL_DIR="/home/aju/Android/kernel_4.19"
 OUT_DIR="/home/aju/Android/Cat_S22_ARM64_RestlessOS_Flash"
-DTC_BIN="/home/aju/Android/voltageos/out/host/linux-x86/bin/dtc"
+DTC_BIN="/usr/bin/dtc"
 TMP_DIR="/tmp/dtbo_build"
 
 mkdir -p "$TMP_DIR"

@@ -2,7 +2,7 @@
 set -e
 
 KERNEL_DIR="/home/aju/Android/kernel_4.19"
-OUT_DIR="/home/aju/Android/Cat_S22_ARM64_RestlessOS_Flash"
+OUT_DIR="/home/aju/Android/Cat_S22_ARM64_RestlessOS_Stable_RW"
 KERNEL_BIN="$KERNEL_DIR/arch/arm64/boot/Image.gz"
 RAMDISK="/tmp/boot_unpack_info/ramdisk"
 DTB="/tmp/boot_unpack_info/dtb"
@@ -15,7 +15,7 @@ fi
 if [ ! -f "$RAMDISK" ] || [ ! -f "$DTB" ]; then
     echo "[-] Extracting base ramdisk and dtb from existing working boot image..."
     mkdir -p /tmp/boot_unpack_info
-    unpack_bootimg --boot_img /home/aju/Android/restless_os/boot/backup/custom_boot_arm64_ksu_419.img --out /tmp/boot_unpack_info
+    unpack_bootimg --boot_img /home/aju/Android/restless_os/boot/backup/boot_ksu_419_arm64_normal_20261106_155535.img --out /tmp/boot_unpack_info
 fi
 
 echo "[+] Packing boot.img with explicit androidboot.mode=normal override..."

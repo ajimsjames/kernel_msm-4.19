@@ -113,6 +113,7 @@ struct spi_panel_data {
 	int disp_te_gpio;
 	int rst_gpio;
 	int disp_dc_gpio;	/* command or data */
+	int blk_gpio;		/* backlight enable gpio */
 	struct spi_panel_cmds on_cmds;
 	struct spi_panel_cmds off_cmds;
 	bool (*check_status)(struct spi_panel_data *pdata);

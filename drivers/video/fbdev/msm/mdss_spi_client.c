@@ -124,10 +124,11 @@ int mdss_spi_tx_parameter(const void *buf, size_t len)
 int mdp3_spi_tx_pixel(const void *buf, size_t len)
 {
 	int rc = 0;
-	struct spi_transfer t = {
-	.tx_buf = buf,
-	.len    = len,
-	};
+	const u8 *p = (const u8 *)buf;
+	u8 chunk[64];
+	size_t offset = 0;
+	size_t i, chunk_len;
+	struct spi_transfer t;
 	struct spi_message m;
 
 	if (!mdss_spi_client) {
@@ -135,10 +136,25 @@ int mdp3_spi_tx_pixel(const void *buf, size_t len)
 		return -EINVAL;
 	}
 
-	mdss_spi_client->bits_per_word = 16;
-	spi_message_init(&m);
-	spi_message_add_tail(&t, &m);
-	rc = spi_sync(mdss_spi_client, &m);
+	mdss_spi_client->bits_per_word = 8;
+
+	while (offset < len) {
+		chunk_len = (len - offset > 64) ? 64 : (len - offset);
+		for (i = 0; i + 1 < chunk_len; i += 2) {
+			chunk[i]     = p[offset + i + 1];
+			chunk[i + 1] = p[offset + i];
+		}
+		memset(&t, 0, sizeof(t));
+		t.tx_buf = chunk;
+		t.len = chunk_len;
+
+		spi_message_init(&m);
+		spi_message_add_tail(&t, &m);
+		rc = spi_sync(mdss_spi_client, &m);
+		if (rc)
+			break;
+		offset += chunk_len;
+	}
 
 	return rc;
 }

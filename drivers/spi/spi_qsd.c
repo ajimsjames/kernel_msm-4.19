@@ -64,6 +64,7 @@ static int msm_spi_pm_suspend_runtime(struct device *device);
 static inline void msm_spi_dma_unmap_buffers(struct msm_spi *dd);
 static int get_local_resources(struct msm_spi *dd);
 static void put_local_resources(struct msm_spi *dd);
+static void reset_core(struct msm_spi *dd);
 
 static inline int msm_spi_configure_gsbi(struct msm_spi *dd,
 					struct platform_device *pdev)
@@ -642,8 +643,12 @@ static void msm_spi_set_mx_counts(struct msm_spi *dd, u32 n_words)
 	 *  - Set the READ/WRITE_COUNT registers to 0.
 	 */
 	if (dd->tx_mode != SPI_BAM_MODE) {
+		u32 fifo_words = dd->pack_words ?
+			DIV_ROUND_UP(dd->cur_msg_len, SPI_MAX_BYTES_PER_WORD) :
+			n_words;
+
 		if (dd->tx_mode == SPI_FIFO_MODE) {
-			if (n_words <= dd->input_fifo_size)
+			if (fifo_words <= dd->input_fifo_size)
 				msm_spi_set_write_count(dd, n_words);
 			else
 				msm_spi_set_write_count(dd, 0);
@@ -652,7 +657,7 @@ static void msm_spi_set_mx_counts(struct msm_spi *dd, u32 n_words)
 			writel_relaxed(n_words, dd->base + SPI_MX_OUTPUT_COUNT);
 
 		if (dd->rx_mode == SPI_FIFO_MODE) {
-			if (n_words <= dd->input_fifo_size)
+			if (fifo_words <= dd->input_fifo_size)
 				writel_relaxed(n_words,
 						dd->base + SPI_MX_READ_COUNT);
 			else
@@ -975,13 +980,22 @@ static inline irqreturn_t msm_spi_qup_irq(int irq, void *dev_id)
 		ret |= msm_spi_output_irq(irq, dev_id);
 
 	if (dd->tx_mode != SPI_BAM_MODE) {
+		if (!dd->rx_done && dd->rx_bytes_remaining > 0) {
+			u32 op_now = readl_relaxed(dd->base + SPI_OPERATIONAL);
+			while ((op_now & SPI_OP_IP_FIFO_NOT_EMPTY) &&
+			       dd->rx_bytes_remaining > 0) {
+				msm_spi_read_word_from_fifo(dd);
+				op_now = readl_relaxed(dd->base + SPI_OPERATIONAL);
+			}
+		}
 		if (!dd->rx_done) {
 			if (dd->rx_bytes_remaining == 0)
 				dd->rx_done = true;
 		}
 		if (!dd->tx_done) {
 			if (!dd->tx_bytes_remaining &&
-					(op & SPI_OP_IP_FIFO_NOT_EMPTY)) {
+					((op & SPI_OP_IP_FIFO_NOT_EMPTY) ||
+					 dd->rx_bytes_remaining == 0)) {
 				dd->tx_done = true;
 			}
 		}
@@ -1211,6 +1225,7 @@ static inline void msm_spi_dma_unmap_buffers(struct msm_spi *dd)
 static inline bool
 msm_spi_use_dma(struct msm_spi *dd, struct spi_transfer *tr, u8 bpw)
 {
+	return false;
 	if (!dd->use_dma)
 		return false;
 
@@ -1249,8 +1264,7 @@ msm_spi_use_dma(struct msm_spi *dd, struct spi_transfer *tr, u8 bpw)
  * msm_spi_set_transfer_mode: Chooses optimal transfer mode. Sets dd->mode and
  * prepares to process a transfer.
  */
-static void
-msm_spi_set_transfer_mode(struct msm_spi *dd, u8 bpw, u32 read_count)
+static void msm_spi_set_transfer_mode(struct msm_spi *dd, u8 bpw, u32 read_count)
 {
 	if (msm_spi_use_dma(dd, dd->cur_transfer, bpw)) {
 		dd->tx_mode = SPI_BAM_MODE;
@@ -1286,6 +1300,7 @@ static void msm_spi_set_qup_io_modes(struct msm_spi *dd)
 		(dd->cur_transfer->bits_per_word <= 32) &&
 		(dd->cur_transfer->bits_per_word % 8 == 0))) {
 		spi_iom |= SPI_IO_M_PACK_EN | SPI_IO_M_UNPACK_EN;
+		spi_iom |= SPI_IO_M_OUTPUT_BIT_SHIFT_EN;
 		dd->pack_words = true;
 	} else {
 		spi_iom &= ~(SPI_IO_M_PACK_EN | SPI_IO_M_UNPACK_EN);
@@ -1312,10 +1327,16 @@ static u32 msm_spi_calc_spi_ioc_clk_polarity(u32 spi_ioc, u8 mode)
  */
 static u32 msm_spi_set_spi_io_control(struct msm_spi *dd)
 {
-	u32 spi_ioc, spi_ioc_orig, chip_select;
+	u32 spi_ioc, spi_ioc_orig, chip_select, mask;
 
 	spi_ioc = readl_relaxed(dd->base + SPI_IO_CONTROL);
 	spi_ioc_orig = spi_ioc;
+	spi_ioc |= SPI_IO_C_NO_TRI_STATE;
+	mask = SPI_IO_C_CS_N_POLARITY_0 << dd->spi->chip_select;
+	if (dd->spi->mode & SPI_CS_HIGH)
+		spi_ioc |= mask;
+	else
+		spi_ioc &= ~mask;
 	spi_ioc = msm_spi_calc_spi_ioc_clk_polarity(spi_ioc
 						, dd->spi->mode);
 	/* Set chip-select */
@@ -1420,6 +1441,7 @@ static int msm_spi_process_transfer(struct msm_spi *dd)
 	}
 
 	msm_spi_set_transfer_mode(dd, bpw, read_count);
+	msm_spi_set_qup_io_modes(dd);
 	msm_spi_set_mx_counts(dd, read_count);
 	if (dd->tx_mode == SPI_BAM_MODE) {
 		ret = msm_spi_dma_map_buffers(dd);
@@ -1435,7 +1457,6 @@ static int msm_spi_process_transfer(struct msm_spi *dd)
 	"%s(): bpw:%d speed:%d msg_len:%d timeout:%u xfer_mode:%d\n",
 	__func__, bpw, max_speed, dd->cur_msg_len, timeout, dd->tx_mode);
 
-	msm_spi_set_qup_io_modes(dd);
 	msm_spi_set_spi_config(dd, bpw);
 	msm_spi_set_qup_config(dd, bpw);
 	spi_ioc = msm_spi_set_spi_io_control(dd);
@@ -1478,8 +1499,33 @@ static int msm_spi_process_transfer(struct msm_spi *dd)
 		if (dd->write_buf &&
 		    !wait_for_completion_timeout(&dd->tx_transfer_complete,
 		    timeout)) {
-			dev_err(dd->dev, "%s: SPI Tx transaction timeout\n",
-				__func__);
+			if (dd->tx_mode != SPI_BAM_MODE &&
+			    dd->tx_bytes_remaining == 0) {
+				while ((readl_relaxed(dd->base + SPI_OPERATIONAL) &
+					SPI_OP_IP_FIFO_NOT_EMPTY) &&
+				       dd->rx_bytes_remaining > 0)
+					msm_spi_read_word_from_fifo(dd);
+				if (dd->rx_bytes_remaining == 0)
+					break;
+			}
+	dev_err(dd->dev, "%s: SPI Tx transaction timeout (len=%u mode=%d tx_rem=%u rx_rem=%u op=0x%x state=0x%x iom=0x%x)\n",
+				__func__, dd->cur_msg_len, dd->tx_mode,
+				dd->tx_bytes_remaining, dd->rx_bytes_remaining,
+				readl_relaxed(dd->base + SPI_OPERATIONAL),
+				readl_relaxed(dd->base + SPI_STATE),
+				readl_relaxed(dd->base + SPI_IO_MODES));
+			pinctrl_select_state(dd->pinctrl, dd->pins_sleep);
+			pinctrl_select_state(dd->pinctrl, dd->pins_active);
+			clk_disable_unprepare(dd->clk);
+			clk_disable_unprepare(dd->pclk);
+			clk_prepare_enable(dd->pclk);
+			clk_prepare_enable(dd->clk);
+			dd->clock_speed = 0;
+			msm_spi_clock_set(dd, max_speed);
+			msm_spi_register_init(dd);
+			msm_spi_enable_error_flags(dd);
+			writel_relaxed(SPI_IO_C_NO_TRI_STATE, dd->base + SPI_IO_CONTROL);
+			msm_spi_set_state(dd, SPI_OP_STATE_RESET);
 			status = -EIO;
 			break;
 		}
@@ -1567,6 +1613,7 @@ static void reset_core(struct msm_spi *dd)
 	u32 spi_ioc;
 
 	msm_spi_register_init(dd);
+	msm_spi_calculate_fifo_size(dd);
 	/*
 	 * The SPI core generates a bogus input overrun error on some targets,
 	 * when a transition from run to reset state occurs and if the FIFO has
@@ -2482,6 +2529,7 @@ static int init_resources(struct platform_device *pdev)
 	}
 
 	msm_spi_register_init(dd);
+
 	/*
 	 * The SPI core generates a bogus input overrun error on some targets,
 	 * when a transition from run to reset state occurs and if the FIFO has
